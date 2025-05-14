@@ -127,33 +127,38 @@ export const getFirebaseToken = async (serviceWorkerRegistration) => {
 // Setup foreground message handling
 export const setupForegroundMessageHandler = () => {
   console.log('Setting up foreground message handler...');
-  
-  // Create a flag to track whether we've shown a notification
-  let notificationDisplayed = false;
-  
   onMessage(messaging, (payload) => {
     console.log('Message received in foreground:', payload);
-    
-    // Reset the flag for each new message
-    notificationDisplayed = false;
     
     if (payload.notification) {
       const { title = 'New Notification', body = '' } = payload.notification;
       
       // Show a notification if permission is granted
       if (Notification.permission === 'granted') {
-        // Use service worker to show notification
-        navigator.serviceWorker.ready.then(registration => {
-          if (!notificationDisplayed) {
-            registration.showNotification(title, {
+        // Try showing a notification directly if the service worker isn't fully ready
+        if ('Notification' in window) {
+          try {
+            new Notification(title, {
               body,
               icon: '/favicon.ico',
-              badge: '/favicon.ico',
-              data: payload.data,
-              vibrate: [200, 100, 200]
+              data: payload.data
             });
-            notificationDisplayed = true;
+            return;
+          } catch (err) {
+            console.warn('Failed to show notification directly:', err);
+            // Fall back to service worker notification
           }
+        }
+        
+        // Use service worker to show notification
+        navigator.serviceWorker.ready.then(registration => {
+          registration.showNotification(title, {
+            body,
+            icon: '/favicon.ico',
+            badge: '/favicon.ico',
+            data: payload.data,
+            vibrate: [200, 100, 200]
+          });
         });
       }
     }
@@ -202,8 +207,7 @@ export const initializePushNotifications = async () => {
     // Setup foreground message handling
     setupForegroundMessageHandler();
     
-    // We've removed the test notification code that was causing duplicates
-    // The real notifications from Firebase will still work
+    
     
     // Return success with token and service worker registration
     return {

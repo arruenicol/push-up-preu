@@ -26,15 +26,18 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage(function(payload) {
   console.log('[Service Worker] Received background message:', payload);
   
-  // Don't show notification manually in background mode
-  // Firebase FCM will handle this automatically
-  console.log('[Service Worker] Background notification payload:', {
-    title: payload.notification?.title,
-    body: payload.notification?.body,
-    data: payload.data
-  });
-  
-  // Important: Do not return anything here to prevent duplicate notifications
+  const notificationTitle = payload.notification.title || 'New Notification';
+  const notificationOptions = {
+    body: payload.notification.body || '',
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
+    data: payload.data,
+    // Enable vibration for mobile devices
+    vibrate: [200, 100, 200]
+  };
+
+  // Explicitly show notification - needed for Vercel deployment
+  return self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
 // Add service worker lifecycle event handlers
