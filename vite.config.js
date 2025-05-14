@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       strategies: 'injectManifest',
-      srcDir: 'src',                 
+      srcDir: 'public',                 
       filename: 'custom-sw.js',     
       injectRegister: 'auto',
       registerType: 'autoUpdate',
@@ -22,17 +22,17 @@ export default defineConfig({
         theme_color: '#0A0302',
         icons: [
           {
-            src: 'src/icons/favicon-96x96.png',
+            src: 'icons/favicon-96x96.png',
             sizes: '96x96',
             type: 'image/png'
           },
           {
-            src: 'src/icons/icon-192x192.png',
+            src: 'icons/icon-192x192.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: 'src/icons/icon-512x512.png',
+            src: 'icons/icon-512x512.png',
             sizes: '512x512',
             type: 'image/png',
           }
