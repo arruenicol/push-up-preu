@@ -1,5 +1,9 @@
 // public/firebase-messaging-sw.js
 
+// Add version for cache busting
+const SW_VERSION = '1.0.1';
+console.log(`[Service Worker] Version ${SW_VERSION} initializing`);
+
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
@@ -22,28 +26,43 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage(function(payload) {
   console.log('[Service Worker] Received background message:', payload);
   
-  // We don't need to call showNotification here, as Firebase will automatically
-  // display the notification from the payload when in background mode.
-  // This prevents the duplicate notification issue.
-  
-  // Just log the information
+  // Don't show notification manually in background mode
+  // Firebase FCM will handle this automatically
   console.log('[Service Worker] Background notification payload:', {
     title: payload.notification?.title,
     body: payload.notification?.body,
     data: payload.data
   });
+  
+  // Important: Do not return anything here to prevent duplicate notifications
 });
 
 // Add service worker lifecycle event handlers
 self.addEventListener('install', (event) => { 
   console.log('[Service Worker] Install event');
-  self.skipWaiting(); // Ensure the service worker activates immediately
+  // Force activation
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (event) => {
   console.log('[Service Worker] Activate event');
-  // Take control of all clients as soon as it activates
-  event.waitUntil(self.clients.claim());
+  // Take control of all clients immediately
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      // Clear any old caches if needed
+      caches.keys().then(cacheNames => {
+        return Promise.all(
+          cacheNames.map(cacheName => {
+            if (cacheName.startsWith('firebase-messaging') && cacheName !== 'firebase-messaging-' + SW_VERSION) {
+              return caches.delete(cacheName);
+            }
+            return null;
+          })
+        );
+      })
+    ])
+  );
 });
 
 // Handle notification clicks
@@ -52,15 +71,19 @@ self.addEventListener('notificationclick', (event) => {
   
   event.notification.close();
   
+  const urlToOpen = event.notification.data?.url || '/notifications';
+  
   // This looks to see if the current window is already open and focuses it
   event.waitUntil(
     self.clients.matchAll({type: 'window'}).then(clientList => {
       // If a window is already open, focus it
-      if (clientList.length > 0) {
-        return clientList[0].focus();
+      for (const client of clientList) {
+        if (client.url.includes(self.registration.scope) && 'focus' in client) {
+          return client.focus();
+        }
       }
       // Otherwise open a new window
-      return self.clients.openWindow('/notifications');
+      return self.clients.openWindow(urlToOpen);
     })
   );
 });

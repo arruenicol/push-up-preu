@@ -1,7 +1,4 @@
 // frontend/src/services/push.js
-/**
- * Servicio para gestionar notificaciones push
- */
 
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { initializeApp } from "firebase/app";
@@ -54,11 +51,49 @@ export const registerServiceWorker = async () => {
   
   try {
     console.log('Registering service worker...');
-    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     
-    // Wait for the service worker to be ready
+    // Add service worker registration options for Vercel environment
+    const swOptions = {
+      scope: '/'
+    };
+    
+    // Register with explicit scope and check if it's already registered
+    let registration;
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    
+    // Check if we already have a service worker registered with the right scope
+    const existingRegistration = registrations.find(reg => 
+      reg.scope.includes(window.location.origin) && 
+      (reg.active || reg.installing || reg.waiting)
+    );
+    
+    if (existingRegistration) {
+      console.log('Service Worker already registered:', existingRegistration);
+      registration = existingRegistration;
+      
+      // Force update the service worker to ensure it's the latest version
+      await existingRegistration.update();
+    } else {
+      registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', swOptions);
+      console.log('Service Worker registered successfully:', registration);
+    }
+    
+    // Wait for the service worker to be active
+    if (registration.installing) {
+      console.log('Service Worker installing...');
+      
+      await new Promise((resolve) => {
+        registration.installing.addEventListener('statechange', (e) => {
+          if (e.target.state === 'activated') {
+            console.log('Service Worker activated');
+            resolve();
+          }
+        });
+      });
+    }
+    
+    // Make sure service worker is ready
     await navigator.serviceWorker.ready;
-    console.log('Service Worker registered successfully:', registration);
     return registration;
   } catch (error) {
     console.error('Error registering Service Worker:', error);
@@ -92,19 +127,33 @@ export const getFirebaseToken = async (serviceWorkerRegistration) => {
 // Setup foreground message handling
 export const setupForegroundMessageHandler = () => {
   console.log('Setting up foreground message handler...');
+  
+  // Create a flag to track whether we've shown a notification
+  let notificationDisplayed = false;
+  
   onMessage(messaging, (payload) => {
     console.log('Message received in foreground:', payload);
     
+    // Reset the flag for each new message
+    notificationDisplayed = false;
+    
     if (payload.notification) {
-      const { title, body } = payload.notification;
+      const { title = 'New Notification', body = '' } = payload.notification;
       
       // Show a notification if permission is granted
       if (Notification.permission === 'granted') {
+        // Use service worker to show notification
         navigator.serviceWorker.ready.then(registration => {
-          registration.showNotification(title, {
-            body,
-            icon: '/favicon.ico',
-          });
+          if (!notificationDisplayed) {
+            registration.showNotification(title, {
+              body,
+              icon: '/favicon.ico',
+              badge: '/favicon.ico',
+              data: payload.data,
+              vibrate: [200, 100, 200]
+            });
+            notificationDisplayed = true;
+          }
         });
       }
     }
@@ -152,6 +201,9 @@ export const initializePushNotifications = async () => {
     
     // Setup foreground message handling
     setupForegroundMessageHandler();
+    
+    // We've removed the test notification code that was causing duplicates
+    // The real notifications from Firebase will still work
     
     // Return success with token and service worker registration
     return {
