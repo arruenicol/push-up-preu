@@ -1,8 +1,5 @@
 // public/firebase-messaging-sw.js
-
-// Add version for cache busting
-const SW_VERSION = '1.0.1';
-console.log(`[Service Worker] Version ${SW_VERSION} initializing`);
+// Firebase Service Worker for Push Notifications
 
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
@@ -26,67 +23,86 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage(function(payload) {
   console.log('[Service Worker] Received background message:', payload);
   
-  const notificationTitle = payload.notification.title || 'New Notification';
-  const notificationOptions = {
-    body: payload.notification.body || '',
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
-    data: payload.data,
-    // Enable vibration for mobile devices
-    vibrate: [200, 100, 200]
+  // Extract notification data
+  const notificationData = {
+    title: payload.notification?.title || 'New Notification',
+    body: payload.notification?.body || '',
+    data: payload.data || {},
+    timestamp: Date.now(),
+    read: false,
+    id: `notification_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
   };
-
-  // Explicitly show notification - needed for Vercel deployment
-  return self.registration.showNotification(notificationTitle, notificationOptions);
+  
+  // Send message to client to save the notification
+  self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true
+  }).then(clients => {
+    if (clients && clients.length) {
+      // Send to all available clients
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'NOTIFICATION_RECEIVED',
+          notification: notificationData
+        });
+      });
+    } else {
+      console.log('[Service Worker] No clients available, will show notification only');
+    }
+  });
+  
+  // Display the notification
+  self.registration.showNotification(notificationData.title, {
+    body: notificationData.body,
+    icon: '/favicon.ico',
+    data: {
+      ...notificationData.data,
+      id: notificationData.id
+    }
+  });
 });
 
 // Add service worker lifecycle event handlers
 self.addEventListener('install', (event) => { 
   console.log('[Service Worker] Install event');
-  // Force activation
-  event.waitUntil(self.skipWaiting());
+  self.skipWaiting(); // Ensure the service worker activates immediately
 });
 
 self.addEventListener('activate', (event) => {
   console.log('[Service Worker] Activate event');
-  // Take control of all clients immediately
-  event.waitUntil(
-    Promise.all([
-      self.clients.claim(),
-      // Clear any old caches if needed
-      caches.keys().then(cacheNames => {
-        return Promise.all(
-          cacheNames.map(cacheName => {
-            if (cacheName.startsWith('firebase-messaging') && cacheName !== 'firebase-messaging-' + SW_VERSION) {
-              return caches.delete(cacheName);
-            }
-            return null;
-          })
-        );
-      })
-    ])
-  );
+  // Take control of all clients as soon as it activates
+  event.waitUntil(self.clients.claim());
 });
 
 // Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
   console.log('[Service Worker] Notification click:', event);
   
-  event.notification.close();
+  const notification = event.notification;
+  const notificationId = notification.data?.id;
   
-  const urlToOpen = event.notification.data?.url || '/notifications';
+  notification.close();
   
   // This looks to see if the current window is already open and focuses it
   event.waitUntil(
     self.clients.matchAll({type: 'window'}).then(clientList => {
-      // If a window is already open, focus it
-      for (const client of clientList) {
-        if (client.url.includes(self.registration.scope) && 'focus' in client) {
-          return client.focus();
+      // If a window is already open, focus it and send message to mark as read
+      if (clientList.length > 0) {
+        const client = clientList[0];
+        
+        // If we have a notification ID, tell the client to mark it as read
+        if (notificationId) {
+          client.postMessage({
+            type: 'NOTIFICATION_CLICKED',
+            notificationId: notificationId
+          });
         }
+        
+        return client.focus();
       }
+      
       // Otherwise open a new window
-      return self.clients.openWindow(urlToOpen);
+      return self.clients.openWindow('/notifications');
     })
   );
-});
+})

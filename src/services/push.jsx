@@ -1,7 +1,11 @@
 // frontend/src/services/push.js
+/**
+ * Servicio para gestionar notificaciones push
+ */
 
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { initializeApp } from "firebase/app";
+import { saveNotification } from './notificationStorage';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -51,49 +55,28 @@ export const registerServiceWorker = async () => {
   
   try {
     console.log('Registering service worker...');
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     
-    // Add service worker registration options for Vercel environment
-    const swOptions = {
-      scope: '/'
-    };
-    
-    // Register with explicit scope and check if it's already registered
-    let registration;
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    
-    // Check if we already have a service worker registered with the right scope
-    const existingRegistration = registrations.find(reg => 
-      reg.scope.includes(window.location.origin) && 
-      (reg.active || reg.installing || reg.waiting)
-    );
-    
-    if (existingRegistration) {
-      console.log('Service Worker already registered:', existingRegistration);
-      registration = existingRegistration;
-      
-      // Force update the service worker to ensure it's the latest version
-      await existingRegistration.update();
-    } else {
-      registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', swOptions);
-      console.log('Service Worker registered successfully:', registration);
-    }
-    
-    // Wait for the service worker to be active
-    if (registration.installing) {
-      console.log('Service Worker installing...');
-      
-      await new Promise((resolve) => {
-        registration.installing.addEventListener('statechange', (e) => {
-          if (e.target.state === 'activated') {
-            console.log('Service Worker activated');
-            resolve();
-          }
-        });
-      });
-    }
-    
-    // Make sure service worker is ready
+    // Wait for the service worker to be ready
     await navigator.serviceWorker.ready;
+    console.log('Service Worker registered successfully:', registration);
+    
+    // Set up a message listener to receive notifications from service worker
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      console.log('Received message from service worker:', event.data);
+      
+      // If the message contains notification data, save it to storage
+      if (event.data && event.data.type === 'NOTIFICATION_RECEIVED') {
+        const notification = event.data.notification;
+        saveNotification(notification);
+        
+        // Dispatch a custom event that the app can listen for
+        window.dispatchEvent(new CustomEvent('notificationReceived', { 
+          detail: notification 
+        }));
+      }
+    });
+    
     return registration;
   } catch (error) {
     console.error('Error registering Service Worker:', error);
@@ -125,39 +108,47 @@ export const getFirebaseToken = async (serviceWorkerRegistration) => {
 };
 
 // Setup foreground message handling
-export const setupForegroundMessageHandler = () => {
+export const setupForegroundMessageHandler = (onNotificationReceived) => {
   console.log('Setting up foreground message handler...');
   onMessage(messaging, (payload) => {
     console.log('Message received in foreground:', payload);
     
     if (payload.notification) {
-      const { title = 'New Notification', body = '' } = payload.notification;
+      const { title, body } = payload.notification;
+      
+      // Create notification object
+      const notificationData = {
+        title,
+        body,
+        data: payload.data || {},
+        timestamp: Date.now(),
+        read: false,
+        id: `notification_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      };
+      
+      // Save notification to localStorage
+      const updatedNotifications = saveNotification(notificationData);
+      
+      // Call the callback if provided
+      if (typeof onNotificationReceived === 'function') {
+        onNotificationReceived(updatedNotifications);
+      }
+      
+      // Dispatch a custom event
+      window.dispatchEvent(new CustomEvent('notificationReceived', { 
+        detail: notificationData 
+      }));
       
       // Show a notification if permission is granted
       if (Notification.permission === 'granted') {
-        // Try showing a notification directly if the service worker isn't fully ready
-        if ('Notification' in window) {
-          try {
-            new Notification(title, {
-              body,
-              icon: '/favicon.ico',
-              data: payload.data
-            });
-            return;
-          } catch (err) {
-            console.warn('Failed to show notification directly:', err);
-            // Fall back to service worker notification
-          }
-        }
-        
-        // Use service worker to show notification
         navigator.serviceWorker.ready.then(registration => {
           registration.showNotification(title, {
             body,
             icon: '/favicon.ico',
-            badge: '/favicon.ico',
-            data: payload.data,
-            vibrate: [200, 100, 200]
+            data: {
+              ...payload.data,
+              id: notificationData.id // Include the ID in the notification data
+            }
           });
         });
       }
@@ -166,7 +157,7 @@ export const setupForegroundMessageHandler = () => {
 };
 
 // Initialize push notifications
-export const initializePushNotifications = async () => {
+export const initializePushNotifications = async (onNotificationReceived) => {
   console.log('Initializing push notifications...');
   
   if (!isPushSupported()) {
@@ -205,9 +196,7 @@ export const initializePushNotifications = async () => {
     }
     
     // Setup foreground message handling
-    setupForegroundMessageHandler();
-    
-    
+    setupForegroundMessageHandler(onNotificationReceived);
     
     // Return success with token and service worker registration
     return {

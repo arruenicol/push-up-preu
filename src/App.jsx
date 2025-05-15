@@ -9,13 +9,12 @@ import NotificationList from './components/Notification/NotificationList';
 
 import { initializePushNotifications } from './services/push';
 import { notificationService } from './services/api';
+import { getStoredNotifications } from './services/notificationStorage';
 import Header from './components/Header/Header';
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
   const [pushInitialized, setPushInitialized] = useState(false);
-  // We'll still track notifications that arrive when the app is in the foreground
-  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     // Check authentication status when the component mounts
@@ -37,6 +36,8 @@ const App = () => {
 
       try {
         console.log('Setting up push notifications...');
+        
+        // Initialize push notifications with a callback to handle new notifications
         const result = await initializePushNotifications();
         
         if (result.success && result.token) {
@@ -70,7 +71,7 @@ const App = () => {
   const handleLogout = () => {
     setIsAuthenticated(false);
     setPushInitialized(false);
-    setNotifications([]);
+    localStorage.removeItem('token');
   };
 
   return (
@@ -92,11 +93,7 @@ const App = () => {
           path="/notifications"
           element={
             isAuthenticated ? 
-              <NotificationList 
-                onLogout={handleLogout} 
-                notifications={notifications}
-                setNotifications={setNotifications}
-              /> : 
+              <NotificationList onLogout={handleLogout} /> : 
               <Navigate to="/login" />
           }
         />
