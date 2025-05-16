@@ -22,44 +22,47 @@ const messaging = firebase.messaging();
 // Handle background messages
 messaging.onBackgroundMessage(function(payload) {
   console.log('[Service Worker] Received background message:', payload);
-  
-  // Extract notification data
-  const notificationData = {
-    title: payload.notification?.title || 'New Notification',
+
+  // Construcción de la notificación
+  const notificationTitle = payload.notification?.title || 'Nueva notificación';
+  const notificationOptions = {
     body: payload.notification?.body || '',
-    data: payload.data || {},
+    icon: '/icons/icon-192x192.png', // Mejor icono para notificaciones
+    badge: '/icons/favicon-96x96.png', // Badge visible en móviles
+    data: {
+      ...payload.data,
+      id: `notification_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+    },
+    requireInteraction: true, // Mantiene la notificación hasta que el usuario la cierre
+    vibrate: [200, 100, 200], // Patrón de vibración
     timestamp: Date.now(),
-    read: false,
-    id: `notification_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+    renotify: true // Permite que nuevas notificaciones sobrescriban las anteriores si tienen el mismo tag
   };
-  
-  // Send message to client to save the notification
+
+  // Enviar mensaje a los clientes abiertos
   self.clients.matchAll({
     type: 'window',
     includeUncontrolled: true
   }).then(clients => {
     if (clients && clients.length) {
-      // Send to all available clients
       clients.forEach(client => {
         client.postMessage({
           type: 'NOTIFICATION_RECEIVED',
-          notification: notificationData
+          notification: {
+            title: notificationTitle,
+            ...notificationOptions
+          }
         });
       });
     } else {
       console.log('[Service Worker] No clients available, will show notification only');
     }
   });
-  
-  // Display the notification
-  self.registration.showNotification(notificationData.title, {
-    body: notificationData.body,
-    icon: '/favicon.ico',
-    data: {
-      ...notificationData.data,
-      id: notificationData.id
-    }
-  });
+
+  // Mostrar la notificación y loguear el resultado
+  self.registration.showNotification(notificationTitle, notificationOptions)
+    .then(() => console.log('[Service Worker] Notification shown successfully'))
+    .catch(error => console.error('[Service Worker] Error showing notification:', error));
 });
 
 // Add service worker lifecycle event handlers
