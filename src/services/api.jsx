@@ -1,4 +1,4 @@
- //frontend/src/services/api.js
+//frontend/src/services/api.js
 import axios from 'axios';
 
 // Make sure this is correctly set in your Vercel environment variables
@@ -125,7 +125,8 @@ export const notificationService = {
   },
   
   registerPushToken: (token) => {
-    return api.get(`${API_URL}/users/register_push_token/`, { push_token: token });
+    // Cambiado a POST y el token se envía en el body
+    return api.post(`${API_URL}/users/register_push_token/`, { push_token: token });
   },
 };
 
