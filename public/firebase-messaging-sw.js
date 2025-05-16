@@ -44,6 +44,7 @@ messaging.onBackgroundMessage(function(payload) {
     type: 'window',
     includeUncontrolled: true
   }).then(clients => {
+    let notificationShown = false;
     if (clients && clients.length) {
       clients.forEach(client => {
         client.postMessage({
@@ -54,15 +55,28 @@ messaging.onBackgroundMessage(function(payload) {
           }
         });
       });
+      // Forzar mostrar la notificación aunque haya clientes abiertos
+      self.registration.showNotification(notificationTitle, notificationOptions)
+        .then(() => {
+          notificationShown = true;
+          console.log('[Service Worker] Notification shown successfully (with clients open)');
+        })
+        .catch(error => console.error('[Service Worker] Error showing notification:', error));
     } else {
       console.log('[Service Worker] No clients available, will show notification only');
+      self.registration.showNotification(notificationTitle, notificationOptions)
+        .then(() => {
+          notificationShown = true;
+          console.log('[Service Worker] Notification shown successfully (no clients)');
+        })
+        .catch(error => console.error('[Service Worker] Error showing notification:', error));
     }
+    setTimeout(() => {
+      if (!notificationShown) {
+        console.warn('[Service Worker] Notification may not have been shown. Check browser permissions and focus state.');
+      }
+    }, 1000);
   });
-
-  // Mostrar la notificación y loguear el resultado
-  self.registration.showNotification(notificationTitle, notificationOptions)
-    .then(() => console.log('[Service Worker] Notification shown successfully'))
-    .catch(error => console.error('[Service Worker] Error showing notification:', error));
 });
 
 // Add service worker lifecycle event handlers
