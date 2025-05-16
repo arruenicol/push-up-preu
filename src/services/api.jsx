@@ -67,7 +67,7 @@ api.interceptors.response.use(
 // Servicio de autenticación
 export const authService = {
   login: async (email, password) => {
-    const response = await api.post('/token/', {
+    const response = await api.post(`${API_URL}/token/`, {
       email,
       password
     });
@@ -82,7 +82,7 @@ export const authService = {
   
   register: async (userData) => {
     console.log('Registering user with API URL:', API_URL);
-    return api.post('/users/', userData);
+    return api.post(`${API_URL}/users/`, userData);
   },
   
   logout: () => {
@@ -91,41 +91,41 @@ export const authService = {
   },
   
   getCurrentUser: async () => {
-    return api.get('/users/me/');
+    return api.get(`${API_URL}/users/me/`);
   },
 };
 
 // Servicio de cursos
 export const courseService = {
   getAllCourses: () => {
-    return api.get('/courses/');
+    return api.get(`${API_URL}/courses/`);
   },
   
   getCourse: (id) => {
-    return api.get(`/courses/${id}/`);
+    return api.get(`${API_URL}/courses/${id}/`);
   },
   
   getMyGroups: () => {
-    return api.get('/groups/my_groups/');
+    return api.get(`${API_URL}/groups/my_groups/`);
   },
   
   getGroupDetail: (id) => {
-    return api.get(`/groups/${id}/`);
+    return api.get(`${API_URL}/groups/${id}/`);
   },
 };
 
 // Servicio de notificaciones
 export const notificationService = {
   getMyNotifications: () => {
-    return api.get('/notifications/my_notifications/');
+    return api.get(`${API_URL}/notifications/my_notifications/`);
   },
   
   getNotification: (id) => {
-    return api.get(`/notifications/${id}/`);
+    return api.get(`${API_URL}/notifications/${id}/`);
   },
   
   registerPushToken: (token) => {
-    return api.post('/users/register_push_token/', { push_token: token });
+    return api.get(`${API_URL}/users/register_push_token/`, { push_token: token });
   },
 };
 
